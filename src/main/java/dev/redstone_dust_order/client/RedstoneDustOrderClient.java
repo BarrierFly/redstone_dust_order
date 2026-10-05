@@ -35,12 +35,15 @@ import dev.redstone_dust_order.command.RsusocCommand;
  *
  * <p>Startup order matters and is deliberate:
  * <ol>
- *   <li>load config,</li>
- *   <li>push it into {@link OrderColors} <em>before</em> installing the tint,
- *       so the very first mesh already sees the right settings,</li>
- *   <li>install the tint, while {@code BlockColors.createDefault()} has already
- *       run and nothing is meshed yet,</li>
- *   <li>only then register the key, the command and the world-join hook.</li>
+ *   <li>load config and push it into {@link OrderColors}, so the render path
+ *       never sees defaults it was not asked for;</li>
+ *   <li><em>ask</em> for the tint. It cannot be installed yet: Fabric runs client
+ *       entrypoints from inside the {@code Minecraft} constructor and
+ *       {@code BlockColors.createDefault()} has not happened at that point, so
+ *       {@code getBlockColors()} is still null. {@link OrderTint} installs itself
+ *       on the first tick instead — see that class;</li>
+ *   <li>register the key, the command and the world-join hook. All of those are
+ *       safe during entrypoints.</li>
  * </ol>
  */
 public class RedstoneDustOrderClient implements ClientModInitializer
@@ -82,6 +85,8 @@ public class RedstoneDustOrderClient implements ClientModInitializer
 
 	private static void onEndTick(Minecraft client)
 	{
+		OrderTint.ensureInstalled(client);
+
 		if (KeyBindings.consumeTogglePress()) {
 			Config config = Config.INSTANCE;
 			config.setEnabled(!config.enabled());

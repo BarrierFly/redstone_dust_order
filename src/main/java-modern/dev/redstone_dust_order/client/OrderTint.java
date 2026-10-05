@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Set;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.color.block.BlockColors;
 import net.minecraft.client.color.block.BlockTintSource;
 import net.minecraft.client.renderer.block.BlockAndTintGetter;
 import net.minecraft.core.BlockPos;
@@ -47,16 +48,38 @@ import net.minecraft.world.level.block.state.properties.Property;
  * <p>As on the older versions this goes through vanilla's own
  * {@code BlockColors#register}, which overwrites by construction, rather than
  * through Fabric's {@code ColorProviderRegistry}.
+ *
+ * <p>Installation is deferred to the first client tick; see the 1.19.4 - 1.21.x
+ * copy of this class for why {@code install()} cannot do the work itself.
  */
 public final class OrderTint
 {
+	private static boolean requested;
+	private static boolean installed;
+	private static int attempts;
+
 	private OrderTint() {}
 
+	/** Ask for the tint to be installed. Safe to call at any point. */
 	public static void install()
 	{
-		Minecraft client = Minecraft.getInstance();
+		requested = true;
+	}
 
-		client.getBlockColors().register(List.of(new BlockTintSource()
+	/** Installs on the first call where {@code BlockColors} is available. */
+	public static void ensureInstalled(Minecraft client)
+	{
+		if (installed || !requested) return;
+
+		attempts++;
+
+		BlockColors colors = client.getBlockColors();
+		if (colors == null) return;
+
+		installed = true;
+		requested = false;
+
+		colors.register(List.of(new BlockTintSource()
 		{
 			@Override
 			public int color(BlockState state)
@@ -82,6 +105,14 @@ public final class OrderTint
 				return Set.of(RedstoneWireBlock.POWER);
 			}
 		}), Blocks.REDSTONE_WIRE);
+
+		RedstoneDustOrderClient.LOGGER.info("Redstone dust tint installed ({} tick(s) after startup)", attempts);
+	}
+
+	/** True once the tint is actually in place. */
+	public static boolean installed()
+	{
+		return installed;
 	}
 
 	/** Vanilla's power-based colour, straight from the block itself. */

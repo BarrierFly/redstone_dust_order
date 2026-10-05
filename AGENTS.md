@@ -96,6 +96,31 @@ Two consequences that are easy to get wrong:
 - On 26.x, `relevantProperties` must include `POWER`, or the tint cache returns a
   stale colour whenever `alpha < 1`.
 
+### The tint cannot be installed from the client entrypoint
+
+Fabric invokes `ClientModInitializer#onInitializeClient` from inside the
+`Minecraft` constructor — `Hooks.startClient` is injected very early — while
+`blockColors = BlockColors.createDefault()` runs about a thousand instructions
+later. `Minecraft#getBlockColors()` is therefore **null** at entrypoint time.
+
+Calling `getBlockColors().register(...)` there is a hard NPE that aborts client
+startup. This actually happened; the crash was
+
+```
+Caused by: java.lang.NullPointerException: ... the return value of
+  net.minecraft.class_310.method_1505() is null
+    at OrderTint.install(OrderTint.java:49)
+```
+
+So `OrderTint.install()` only records the *intent*, and
+`OrderTint.ensureInstalled(client)` — called from the client tick — does the work
+on the first tick where `getBlockColors()` is non-null. That is early enough by a
+wide margin: chunk meshing needs a `ClientLevel`, and there cannot be one before
+the client is running.
+
+If you add anything else that touches client state which the constructor fills in
+later, assume the same rule: ask at entrypoint, act on the first tick.
+
 ## Building
 
 ```
