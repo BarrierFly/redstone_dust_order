@@ -1,0 +1,22 @@
+{
+  "redstone_dust_order.key.toggle": "Toggle redstone update-order colouring",
+
+  "redstone_dust_order.palette.high_contrast": "High contrast (default)",
+  "redstone_dust_order.palette.group3": "3-group (simulator)",
+  "redstone_dust_order.palette.fourier": "Update order (simulator, exploration)",
+
+  "redstone_dust_order.warn.randomized": "[Redstone Dust Update Order] This world has the vanilla redstone_experiments feature enabled, which randomises redstone update order. The colouring below cannot predict it and is meaningless here.",
+
+  "redstone_dust_order.command.on": "on",
+  "redstone_dust_order.command.off": "off",
+  "redstone_dust_order.command.status": "Redstone Dust Update Order — %s, palette %s, alpha %s",
+  "redstone_dust_order.command.status_extra": "%s distinct update orders · config: %s",
+  "redstone_dust_order.command.enabled": "Redstone update-order colouring enabled.",
+  "redstone_dust_order.command.disabled": "Redstone update-order colouring disabled.",
+  "redstone_dust_order.command.palette_set": "Palette set to %s.",
+  "redstone_dust_order.command.unknown_palette": "Unknown palette '%s'. Try high_contrast, group3 or fourier.",
+  "redstone_dust_order.command.alpha_set": "Alpha set to %s (0 = vanilla colour only, 1 = order colour only).",
+  "redstone_dust_order.command.saved": "Saved.",
+  "redstone_dust_order.command.check_no_player": "No player to check — standing in a world would let /rsusoc check re-derive the model for your position.",
+  "redstone_dust_order.command.check_failed": "Model check FAILED — the lookup table no longer matches the arithmetic it was built from. Please report this."
+}

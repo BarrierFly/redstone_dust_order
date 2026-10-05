@@ -1,0 +1,301 @@
+// gradle.properties values arrive as strings.
+final int mcVersion = Integer.parseInt(project.mcVersion)
+final int apiEra = Integer.parseInt(project.api_era)
+final boolean unobfuscated = mcVersion >= 26_00_00
+
+apply plugin: 'maven-publish'
+apply plugin: unobfuscated ? 'net.fabricmc.fabric-loom' : 'net.fabricmc.fabric-loom-remap'
+apply plugin: 'me.fallenbreath.yamlang'
+
+/*
+ * API eras.
+ *
+ * Only the block tint API really differs between supported versions, so that is
+ * all the split has to cover:
+ *
+ *   era 0   1.19.4, 1.20.1, 1.21.1   vanilla BlockColor, KeyMapping category String
+ *   era 1   1.21.10, 1.21.11         vanilla BlockColor, KeyMapping.Category record
+ *   era 2   26.3                     vanilla BlockTintSource, ResourceLocation -> Identifier
+ *
+ * Version independent code lives in src/main/java and is compiled once per
+ * subproject. The rest lives in five directories, added per era below:
+ *
+ *   java-legacy       tint, mesh rebuild and world warning for 1.19.4 - 1.21.x
+ *   java-legacy-keys  the key binding for 1.19.4 - 1.21.1
+ *   java-mid-keys     the key binding for 1.21.10 and 1.21.11
+ *   java-modern       tint, mesh rebuild and world warning for 26.x
+ *   java-modern-keys  the key binding for 26.x
+ *
+ * The three key directories are separate because the key binding is the one API
+ * that changed twice: 1.21.10 turned KeyMapping's category type, and 26.x
+ * renamed both the Fabric helper and InputConstants.Type.KEYSYM.
+ *
+ * This is done with source directories rather than the fabric-mod-template's
+ * `//#if MC >= ...` preprocessor comments, on purpose. The preprocessor derives
+ * each older branch by reverse-applying per-version diffs stored under
+ * versions/<mc>/src; with no diffs to apply it passes the sources through
+ * untouched and the conditional comments would silently compile the wrong
+ * branch. Separate directories cannot rot that way, they make it impossible to
+ * put two copies of one class on one source path, and they let the IDE answer
+ * "which file does 1.21.1 actually use".
+ */
+def eraSourceDirs = [
+		'0': ['src/main/java-legacy', 'src/main/java-legacy-keys'],
+		'1': ['src/main/java-legacy', 'src/main/java-mid-keys'],
+		'2': ['src/main/java-modern', 'src/main/java-modern-keys'],
+]
+
+repositories {
+	maven {
+		url = 'https://maven.parchmentmc.org'
+		content { includeGroup('org.parchmentmc.data') }
+	}
+	maven {
+		url = 'https://jitpack.io'
+		content { includeGroupAndSubgroups('com.github') }
+	}
+	maven {
+		url = 'https://maven.fallenbreath.me/releases'
+		content { includeGroup('me.fallenbreath') }
+	}
+}
+
+dependencies {
+	def processDependency = { dep ->
+		// https://github.com/FabricMC/fabric-loader/issues/783
+		if (dep instanceof ModuleDependency) {
+			if (!(dep.group == 'net.fabricmc' && dep.name == 'fabric-loader')) {
+				dep.exclude group: 'net.fabricmc', module: 'fabric-loader'
+			}
+		}
+		return dep
+	}
+	def autoImplementation = { Object... args -> processDependency(unobfuscated ? implementation(*args) : modImplementation(*args)) }
+	def autoRuntimeOnly = { Object... args -> processDependency(unobfuscated ? runtimeOnly(*args) : modRuntimeOnly(*args)) }
+	def autoCompileOnly = { Object... args -> processDependency(unobfuscated ? compileOnly(*args) : modCompileOnly(*args)) }
+
+	// loom
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	if (!unobfuscated) {
+		mappings loom.layered() {
+			officialMojangMappings()
+			if (project.parchment_version.size() > 0) {
+				parchment("org.parchmentmc.data:parchment-${project.minecraft_version}:${project.parchment_version}@zip")
+			}
+		}
+	}
+	autoImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+	// runtime mods
+//	if (mcVersion < 11904) {
+//		autoRuntimeOnly(mcVersion < 11900 ? "com.github.astei:lazydfu:0.1.2" : "com.github.Fallen-Breath:lazydfu:a7cfc44c0c")
+//	}
+//	// [FEATURE] MIXIN_AUDITOR
+//	autoRuntimeOnly "me.fallenbreath:mixin-auditor:0.2.0-${unobfuscated ? 'u' : 'o'}"
+
+	// dependencies
+	// The mod needs fabric-lifecycle-events-v1 (client tick + join),
+	// fabric-key-binding-api-v1 (the toggle key) and fabric-client-command-api-v2
+	// (/rsusoc). The umbrella artifact is used rather than individual modules
+	// because the module list and names churn between releases; see AGENTS.md.
+	// Note the mod does NOT use fabric-rendering-v1: the tint is installed
+	// through vanilla's own BlockColors#register, which overwrites by
+	// construction, so Fabric's ColorProviderRegistry (which wraps instead of
+	// replacing when vanilla already has a provider) is not needed.
+	autoImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+	autoRuntimeOnly "net.fabricmc:fabric-loader:${project.loader_version}"
+}
+
+String LANG_DIR = 'assets/redstone_dust_order/lang'
+
+// Per-era sources, see the comment above `eraSourceDirs`.
+// Assigned rather than appended, because `srcDirs +=` reads-modify-writes
+// through the setter, and the setter *replaces* the whole source path.
+// Every entry is resolved to a File: srcDirs is a Set<File> and a bare String
+// in the list does not survive the coercion.
+def allJavaSrcDirs = (['src/main/java'] + eraSourceDirs[apiEra.toString()]).collect { rootProject.file(it) }
+logger.lifecycle("mc ${project.minecraft_version} (era ${apiEra}) java sources: ${allJavaSrcDirs*.name}")
+sourceSets.main.java.srcDirs = allJavaSrcDirs
+
+// Each subproject's projectDir is versions/<mc>, so its default source paths
+// point inside that directory and find nothing. Both the tests and the mod
+// resources live at the repo root and are shared by every branch.
+sourceSets.test.java.srcDirs = [rootProject.file('src/test/java')]
+sourceSets.test.resources.srcDirs = [rootProject.file('src/test/resources')]
+
+// Appended, not assigned: Loom contributes its own resource directories here and
+// replacing the list would drop them.
+sourceSets.main.resources.srcDir(rootProject.file('src/main/resources'))
+JavaVersion JAVA_COMPATIBILITY
+if (mcVersion >= 260000) {
+	JAVA_COMPATIBILITY = JavaVersion.VERSION_25
+} else if (mcVersion >= 12005) {
+	JAVA_COMPATIBILITY = JavaVersion.VERSION_21
+} else if (mcVersion >= 11800) {
+	JAVA_COMPATIBILITY = JavaVersion.VERSION_17
+} else if (mcVersion >= 11700) {
+	JAVA_COMPATIBILITY = JavaVersion.VERSION_16
+} else {
+	JAVA_COMPATIBILITY = JavaVersion.VERSION_1_8
+}
+JavaVersion MIXIN_COMPATIBILITY_LEVEL = JAVA_COMPATIBILITY
+
+loom {
+	def commonVmArgs = ['-Dmixin.debug.export=true', '-Dmixin.debug.countInjections=true']
+	runConfigs.configureEach {
+		// to make sure it generates all "Minecraft Client (:subproject_name)" applications
+		ideConfigGenerated = true
+		runDir '../../run'
+		vmArgs commonVmArgs
+	}
+}
+
+// hack fix for a gradle 9.5 implicit_dependency issue
+afterEvaluate {
+	tasks.matching { it.name.startsWith('runClient') }.configureEach { runTask ->
+		parent.subprojects.findAll { it != project }.each { otherProject ->
+			def downloadAssets = otherProject.tasks.findByName('downloadAssets')
+			if (downloadAssets != null) {
+				runTask.mustRunAfter(downloadAssets)
+			}
+		}
+	}
+}
+
+String modVersionSuffix = ''
+String artifactVersion = project.mod_version
+String artifactVersionSuffix = ''
+// detect github action environment variables
+// https://docs.github.com/en/actions/learn-github-actions/environment-variables#default-environment-variables
+if (System.getenv("BUILD_RELEASE") != "true") {
+	String buildNumber = System.getenv("BUILD_ID")
+	modVersionSuffix += buildNumber != null ? ('+build.' + buildNumber) : '-SNAPSHOT'
+	artifactVersionSuffix = '-SNAPSHOT'  // A non-release artifact is always a SNAPSHOT artifact
+}
+String fullModVersion = project.mod_version + modVersionSuffix
+String fullProjectVersion, fullArtifactVersion
+
+// Example version values:
+//   project.mod_version     1.0.3                      (the base mod version)
+//   modVersionSuffix        +build.88                  (use github action build number if possible)
+//   artifactVersionSuffix   -SNAPSHOT
+//   fullModVersion          1.0.3+build.88             (the actual mod version to use in the mod)
+//   fullProjectVersion      v1.0.3-mc1.15.2+build.88   (in build output jar name)
+//   fullArtifactVersion     1.0.3-mc1.15.2-SNAPSHOT    (maven artifact version)
+
+group = project.maven_group
+if (System.getenv("JITPACK") == "true") {
+	// move mc version into archivesBaseName, so jitpack will be able to organize archives from multiple subprojects correctly
+	base.archivesName = project.archives_base_name + '-mc' + project.minecraft_version
+	fullProjectVersion = 'v' + project.mod_version + modVersionSuffix
+	fullArtifactVersion = artifactVersion + artifactVersionSuffix
+} else {
+	base.archivesName = project.archives_base_name
+	fullProjectVersion = 'v' + project.mod_version + '-mc' + project.minecraft_version + modVersionSuffix
+	fullArtifactVersion = artifactVersion + '-mc' + project.minecraft_version + artifactVersionSuffix
+}
+version = fullProjectVersion
+
+// See https://youtrack.jetbrains.com/issue/IDEA-296490
+// if IDEA complains about "Cannot resolve resource filtering of MatchingCopyAction" and you want to know why
+processResources {
+	def modProperties = [
+			"id"                  : project.mod_id,
+			"name"                : project.mod_name,
+			"version"             : fullModVersion,
+			"minecraft_dependency": project.minecraft_dependency,
+	]
+	inputs.properties(modProperties)
+
+	filesMatching("fabric.mod.json") {
+		expand modProperties
+	}
+}
+
+// https://github.com/Fallen-Breath/yamlang
+yamlang {
+	targetSourceSets = [sourceSets.main]
+	inputDir = LANG_DIR
+}
+
+// ensure that the encoding is set to UTF-8, no matter what the system default is
+// this fixes some edge cases with special characters not displaying correctly
+// see http://yodaconditions.net/blog/fix-for-java-file-encoding-problems-with-gradle.html
+tasks.withType(JavaCompile).configureEach {
+	options.encoding = "UTF-8"
+	options.compilerArgs << "-Xlint:deprecation" << "-Xlint:unchecked"
+	if (JAVA_COMPATIBILITY <= JavaVersion.VERSION_1_8) {
+		// suppressed "source/target value 8 is obsolete and will be removed in a future release"
+		options.compilerArgs << '-Xlint:-options'
+	}
+}
+
+java {
+	sourceCompatibility = JAVA_COMPATIBILITY
+	targetCompatibility = JAVA_COMPATIBILITY
+
+	// 26.x is compiled at Java 25 and nothing else here runs that high, so it has
+	// to ask for a toolchain explicitly. The older branches (17 and 21) are happy
+	// on whatever JDK runs Gradle, which is why this is not unconditional.
+	if (unobfuscated) {
+		toolchain {
+			languageVersion = JavaLanguageVersion.of(25)
+		}
+	}
+
+	// Loom will automatically attach sourcesJar to your RemapSourcesJar task and to the "build" task
+	// if it is present.
+	// If you remove this line, sources will not be generated.
+	withSourcesJar()
+}
+
+// The order model and the palettes are plain Java with no Minecraft imports, so
+// the whole thing is testable without a game on the classpath.
+dependencies {
+	testImplementation "org.junit.jupiter:junit-jupiter:${project.junit_version}"
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+	useJUnitPlatform()
+	testLogging {
+		events 'passed', 'skipped', 'failed'
+	}
+}
+
+jar {
+	inputs.property "archives_base_name", project.archives_base_name
+	from(rootProject.file('LICENSE')) {
+		rename { "${it}_${inputs.properties.archives_base_name}" }
+	}
+}
+
+
+
+// configure the maven publication
+publishing {
+	publications {
+		mavenJava(MavenPublication) {
+			from components.java
+			artifactId = base.archivesName.get()
+			version = fullArtifactVersion
+		}
+	}
+
+	// select the repositories you want to publish to
+	repositories {
+		// mavenLocal()
+
+//		// [FEATURE] FALLENS_MAVEN
+//		maven {
+//			url = fullArtifactVersion.endsWith("SNAPSHOT") ? "https://maven.fallenbreath.me/snapshots" : "https://maven.fallenbreath.me/releases"
+//			credentials(PasswordCredentials) {
+//				username = 'fallen'
+//				password = System.getenv("FALLENS_MAVEN_TOKEN")
+//			}
+//			authentication {
+//				basic(BasicAuthentication)
+//			}
+//		}
+	}
+}

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "${id}",
+  "version": "${version}",
+
+  "name": "${name}",
+  "description": "Colours redstone dust by the order vanilla updates its 7 neighbours in, making the HashSet iteration pattern visible in-world. Client-side only, works with any resource pack.",
+  "authors": [
+    "opencode"
+  ],
+  "contact": {},
+  "license": "Unlicense",
+  "icon": "icon.png",
+
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "dev.redstone_dust_order.client.RedstoneDustOrderClient"
+    ]
+  },
+
+  "depends": {
+    "fabricloader": ">=0.15.0",
+    "fabric-api": "*",
+    "minecraft": "${minecraft_dependency}"
+  }
+}

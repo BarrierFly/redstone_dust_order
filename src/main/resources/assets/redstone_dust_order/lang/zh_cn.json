@@ -1,0 +1,22 @@
+{
+  "redstone_dust_order.key.toggle": "切换红石粉更新顺序染色",
+
+  "redstone_dust_order.palette.high_contrast": "高对比（默认）",
+  "redstone_dust_order.palette.group3": "3 组分组（模拟器）",
+  "redstone_dust_order.palette.fourier": "更新顺序（模拟器，探索用）",
+
+  "redstone_dust_order.warn.randomized": "[红石粉更新顺序] 当前世界启用了原版 redstone_experiments 实验特性，红石更新顺序被随机化。本 mod 的染色无法预测随机结果，在这里没有意义。",
+
+  "redstone_dust_order.command.on": "开启",
+  "redstone_dust_order.command.off": "关闭",
+  "redstone_dust_order.command.status": "红石粉更新顺序 — %s，调色板 %s，混色 α %s",
+  "redstone_dust_order.command.status_extra": "共 %s 种更新顺序 · 配置文件：%s",
+  "redstone_dust_order.command.enabled": "已开启红石更新顺序染色。",
+  "redstone_dust_order.command.disabled": "已关闭红石更新顺序染色。",
+  "redstone_dust_order.command.palette_set": "调色板已切换为 %s。",
+  "redstone_dust_order.command.unknown_palette": "未知调色板「%s」。可用值：high_contrast、group3、fourier。",
+  "redstone_dust_order.command.alpha_set": "混色 α 已设为 %s（0 = 只显示原版颜色，1 = 只显示更新顺序颜色）。",
+  "redstone_dust_order.command.saved": "已保存。",
+  "redstone_dust_order.command.check_no_player": "没有玩家可供检查 —— 进入世界后再用 /rsusoc check，就能针对你所在的位置重新推导一遍模型。",
+  "redstone_dust_order.command.check_failed": "模型自检未通过 —— 查找表已经和生成它的算术对不上了，请反馈。"
+}

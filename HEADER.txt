@@ -1,0 +1,11 @@
+This file is part of the ${name} project.
+
+Released into the public domain under the Unlicense.
+<https://unlicense.org/>
+
+This software is free software: you can redistribute it and/or modify it
+under the terms of the Unlicense. You may copy, modify, publish,
+perform, sublicense and/or distribute it, in source code form or as a
+compiled binary, for any purpose, with or without fee.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.

@@ -1,0 +1,10 @@
+# Keep line endings deterministic across platforms. Without this, the repo
+# inherits whatever core.autocrlf happens to be set to on each machine.
+* text=auto eol=lf
+
+# Batch files have to keep CRLF to run on Windows.
+*.bat text eol=crlf
+
+# Binaries.
+*.jar binary
+*.png binary
